@@ -1,0 +1,29 @@
+# set variables
+@baseUrl = 192.168.255.69
+
+###
+GET / HTTP/1.1
+Host: {{baseUrl}}
+
+### 
+GET /dictionary HTTP/1.1
+Host: {{baseUrl}}
+
+###
+POST /tasks
+Host: {{baseUrl}}
+Content-Type: application/json
+
+{
+    "stuid": "529",
+    "type": "WORDLE"
+}
+
+###
+POST /tasks/14579c1f-7d0f-4004-9ef8-4b5ba27538db/submit
+Host: {{baseUrl}}
+Content-Type: application/json
+
+{
+    "answer": "WATER"
+}

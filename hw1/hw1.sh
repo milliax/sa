@@ -2,12 +2,17 @@
 
 # env setup
 
-ENDPOINT="http://192.158.255.69"
+ENDPOINT="http://192.168.255.69"
+stuid="529"
 
 ## get parameter tag -t SYS_INFO
-while getopts t: opt
+while getopts "ht:" opt
 do
     case $opt in
+        h) echo "Help message"
+            exit 0
+        ;;
+
         t) TAG=$OPTARG
         
         # if $TAG === SYS_INFO, then print system information
@@ -30,16 +35,65 @@ do
         if [ "$TAG" = "WORDLE" ]; then
             # request an http request to server
             echo "Requesting a new wordle game..."
+
+            ### Request a wordle task from server with json parameters
+
+            response=$(curl -s -X POST "$ENDPOINT/tasks" -H "Content-Type: application/json" -d '{"stuid": "'"$stuid"'", "type": "WORDLE"}')
+            echo "Response from server:"
+            echo "$response"
+
+            # remove quotes from id
+            id="$(echo "$response" | jq -r '.id')"
+            echo "Task ID: $id"
+
+            ### submit a wordle guess to server
+            guess="WATER"
+
+            url="$ENDPOINT/tasks/$id/submit"
+            echo "Submitting guess '$guess' to $url"
+
+            response=$(curl -s -X POST "$url" -H "Content-Type: application/json" -d '{"answer": "'"$guess"'"}')
+            echo "Response from server:"
+            echo "$response"
+
+            exit 0
+        fi
+
+        if [ "$TAG" = "QUORDLE" ]; then
+            # request an http request to server
+            echo "Requesting a new quordle game..."
+
+            exit 0
         fi
 
         if [ "$TAG" = "TEST" ]; then
             # request an http request to server with no body and print the result
-            curl -X GET "$ENDPOINT/"
+            response=$(curl -s "$ENDPOINT/")
+            echo "$response"
+
+            message="$(echo "$response" | jq '.message')"
+
+            echo "Message from server: $message"
+
             exit 0
         fi
 
         echo "$TAG is not implemented yet"
         ;;
-        ?) echo "unknown parameter";;
+
+        
+        ?) echo "unknown parameter"
+        exit 1
+        ;;
+
+        
     esac
+
+    shift
 done
+
+# if no parameter is given, print usage
+if [ -z "$TAG" ]; then
+    echo "Usage: $0 -t TAG"
+    echo "TAG can be SYS_INFO, WORDLE, TEST"
+fi
