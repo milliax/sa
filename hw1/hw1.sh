@@ -44,8 +44,14 @@ get_next_possible(){
     fixed_4=""
     fixed_5=""
 
+    excluded_1=""
+    excluded_2=""
+    excluded_3=""
+    excluded_4=""
+    excluded_5=""
+
     useless_letters=""
-    useable_letters=""
+    required_letters=""
 
     # go throught the history if there is any A, then store in fixed_1~5, and find if a letter is useless store in useless_letters
     guesses=$1
@@ -77,11 +83,20 @@ get_next_possible(){
                         5) fixed_5="$letter" ;;
                    esac
                    ;;
-                B) 
-                # append the letter into useable_letters if not already there
-                     if ! echo "$useable_letters" | grep -q "$letter"; then
-                            useable_letters="$useable_letters$letter"
-                        fi
+                B)
+                   # letter is in the word but wrong position
+                   # track which position it can't be at
+                   case $idx in
+                       1) excluded_1="$excluded_1$letter" ;;
+                       2) excluded_2="$excluded_2$letter" ;;
+                       3) excluded_3="$excluded_3$letter" ;;
+                       4) excluded_4="$excluded_4$letter" ;;
+                       5) excluded_5="$excluded_5$letter" ;;
+                   esac
+                   # add to required letters
+                   if ! echo "$required_letters" | grep -q "$letter"; then
+                       required_letters="$required_letters$letter"
+                   fi
                    ;;
                 X) # letter is not in the word
                    # add letter to useless_letters if not already there
@@ -110,11 +125,14 @@ get_next_possible(){
     if [ -n "$fixed_1" ]; then
         regex="$regex$fixed_1"
     else
-        if [ -n "$useable_letters" ]; then
-            regex_temp="[$useable_letters]"
-            regex="$regex$regex_temp"
+        allowed="$useable_letters"
+        if [ -n "$excluded_1" ]; then
+            allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_1" | fold -w1 | sort -u | tr -d '\n')")
+        fi
+        if [ -n "$allowed" ]; then
+            regex="$regex[$allowed]"
         else
-            regex="^."
+            regex="$regex."
         fi
     fi
 
@@ -122,9 +140,12 @@ get_next_possible(){
     if [ -n "$fixed_2" ]; then
         regex="$regex$fixed_2"
     else
-        if [ -n "$useable_letters" ]; then
-            regex_temp="[$useable_letters]"
-            regex="$regex$regex_temp"
+        allowed="$useable_letters"
+        if [ -n "$excluded_2" ]; then
+            allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_2" | fold -w1 | sort -u | tr -d '\n')")
+        fi
+        if [ -n "$allowed" ]; then
+            regex="$regex[$allowed]"
         else
             regex="$regex."
         fi
@@ -134,9 +155,12 @@ get_next_possible(){
     if [ -n "$fixed_3" ]; then
         regex="$regex$fixed_3"
     else
-        if [ -n "$useable_letters" ]; then
-            regex_temp="[$useable_letters]"
-            regex="$regex$regex_temp"
+        allowed="$useable_letters"
+        if [ -n "$excluded_3" ]; then
+            allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_3" | fold -w1 | sort -u | tr -d '\n')")
+        fi
+        if [ -n "$allowed" ]; then
+            regex="$regex[$allowed]"
         else
             regex="$regex."
         fi
@@ -145,10 +169,13 @@ get_next_possible(){
     # deal with fourth letter
     if [ -n "$fixed_4" ]; then
         regex="$regex$fixed_4"
-    else            
-        if [ -n "$useable_letters" ]; then
-            regex_temp="[$useable_letters]"
-            regex="$regex$regex_temp"
+    else
+        allowed="$useable_letters"
+        if [ -n "$excluded_4" ]; then
+            allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_4" | fold -w1 | sort -u | tr -d '\n')")
+        fi
+        if [ -n "$allowed" ]; then
+            regex="$regex[$allowed]"
         else
             regex="$regex."
         fi
@@ -158,9 +185,12 @@ get_next_possible(){
     if [ -n "$fixed_5" ]; then
         regex="$regex$fixed_5"
     else
-        if [ -n "$useable_letters" ]; then
-            regex_temp="[$useable_letters]"
-            regex="$regex$regex_temp"
+        allowed="$useable_letters"
+        if [ -n "$excluded_5" ]; then
+            allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_5" | fold -w1 | sort -u | tr -d '\n')")
+        fi
+        if [ -n "$allowed" ]; then
+            regex="$regex[$allowed]"
         else
             regex="$regex."
         fi
@@ -169,15 +199,23 @@ get_next_possible(){
     regex="$regex$"
 
     echo "Regex: $regex" > "$terminal"
+    echo "Required letters: $required_letters" > "$terminal"
 
-    # filter possible_words with regex and useless_letters
-    for letter in $(echo "$useless_letters" | fold -w1 | sort -u); do
-        possible_words=$(echo "$possible_words" | grep -v "$letter")
-    done
+    # filter possible_words with regex
+    possible_words=$(echo "$possible_words" | grep -E "$regex")
 
-    # if next_possible exists in history, then get the next one
-    while echo "$guesses" | grep -q "$next_possible"; do
-        next_possible=$(echo "$possible_words" | grep -E "$regex" | grep -v "$next_possible" | head -n 1)
+    # filter to ensure all required letters (from B results) are present
+    if [ -n "$required_letters" ]; then
+        for letter in $(echo "$required_letters" | fold -w1 | sort -u); do
+            possible_words=$(echo "$possible_words" | grep "$letter")
+        done
+    fi
+
+    # get first word that hasn't been guessed yet
+    next_possible=$(echo "$possible_words" | head -n 1)
+    while echo "$guesses" | grep -q ":$next_possible:" && [ -n "$next_possible" ]; do
+        possible_words=$(echo "$possible_words" | grep -v "^$next_possible$")
+        next_possible=$(echo "$possible_words" | head -n 1)
     done
 
     echo "Next possible word: $next_possible" > "$terminal"
