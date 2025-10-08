@@ -32,7 +32,7 @@ get_next_possible(){
     # return the next possible word
 
     # trim $1 the last semicolon
-    history=$(echo "$1" | sed 's/;$//')
+    # history=$(echo "$1" | sed 's/;$//')
     # echo "History: $history" > "$terminal"
 
     # read dictionary, and filter the words according to history
@@ -56,22 +56,25 @@ get_next_possible(){
         guess=$(echo "$i" | cut -d':' -f1)
         result=$(echo "$i" | cut -d':' -f2)
 
-        echo "Guess: $guess, Result: $result" > "$terminal"
+        # echo "Guess: $guess, Result: $result" > "$terminal"
 
-        for j in $(seq 1 5); do
-            echo "Hola" > "$terminal"
-            echo "Checking letter $((j))" > "$terminal"
+        idx=0
 
-            letter=$(echo "$guess" | cut -c$((j)))
-            res_letter=$(echo "$result" | cut -c$((j)))
+        while [ $idx -lt 5 ]; do
+            idx=$((idx + 1))
+
+            # echo "Checking letter $((idx))" > "$terminal"
+
+            letter=$(echo "$guess" | cut -c $((idx)))
+            res_letter=$(echo "$result" | cut -c $((idx)))
 
             case $res_letter in
-                A) case $j in
-                        0) fixed_1="$letter" ;;
-                        1) fixed_2="$letter" ;;
-                        2) fixed_3="$letter" ;;
-                        3) fixed_4="$letter" ;;
-                        4) fixed_5="$letter" ;;
+                A) case $idx in
+                        1) fixed_1="$letter" ;;
+                        2) fixed_2="$letter" ;;
+                        3) fixed_3="$letter" ;;
+                        4) fixed_4="$letter" ;;
+                        5) fixed_5="$letter" ;;
                    esac
                    ;;
                 B) 
@@ -93,55 +96,90 @@ get_next_possible(){
     echo "Fixed letters: $fixed_1 $fixed_2 $fixed_3 $fixed_4 $fixed_5" > "$terminal"
     echo "Useless letters: $useless_letters" > "$terminal"
 
+    # usable letters are a-z excluding useless letters
+    if [ -z "$useless_letters" ]; then
+        useable_letters="abcdefghijklmnopqrstuvwxyz"
+    else
+        useable_letters=$(echo "abcdefghijklmnopqrstuvwxyz" | tr -d "$(echo "$useless_letters" | fold -w1 | sort -u | tr -d '\n')")
+    fi
+
     # using regex to filter possible_words
     regex="^"
-    for i in $(seq 0 4); do
-        case $i in
-            0) if [ -n "$fixed_1" ]; then
-                    regex="$regex$fixed_1"
-                else
-                    regex="$regex."
-                fi
-                ;;
-            1) if [ -n "$fixed_2" ]; then
-                    regex="$regex$fixed_2"
-                else
-                    regex="$regex."
-                fi
-                ;;
-            2) if [ -n "$fixed_3" ]; then
-                    regex="$regex$fixed_3"
-                else
-                    regex="$regex."
-                fi
-                ;;
-            3) if [ -n "$fixed_4" ]; then
-                    regex="$regex$fixed_4"
-                else
-                    regex="$regex."
-                fi
-                ;;
-            4) if [ -n "$fixed_5" ]; then
-                    regex="$regex$fixed_5"
-                else
-                    regex="$regex."
-                fi
-                ;;
-        esac
-    done
+    
+    # deal with first letter
+    if [ -n "$fixed_1" ]; then
+        regex="$regex$fixed_1"
+    else
+        if [ -n "$useable_letters" ]; then
+            regex_temp="[$useable_letters]"
+            regex="$regex$regex_temp"
+        else
+            regex="^."
+        fi
+    fi
+
+    # deal with second letter
+    if [ -n "$fixed_2" ]; then
+        regex="$regex$fixed_2"
+    else
+        if [ -n "$useable_letters" ]; then
+            regex_temp="[$useable_letters]"
+            regex="$regex$regex_temp"
+        else
+            regex="$regex."
+        fi
+    fi
+
+    # deal with third letter
+    if [ -n "$fixed_3" ]; then
+        regex="$regex$fixed_3"
+    else
+        if [ -n "$useable_letters" ]; then
+            regex_temp="[$useable_letters]"
+            regex="$regex$regex_temp"
+        else
+            regex="$regex."
+        fi
+    fi
+
+    # deal with fourth letter
+    if [ -n "$fixed_4" ]; then
+        regex="$regex$fixed_4"
+    else            
+        if [ -n "$useable_letters" ]; then
+            regex_temp="[$useable_letters]"
+            regex="$regex$regex_temp"
+        else
+            regex="$regex."
+        fi
+    fi
+
+    # deal with fifth letter
+    if [ -n "$fixed_5" ]; then
+        regex="$regex$fixed_5"
+    else
+        if [ -n "$useable_letters" ]; then
+            regex_temp="[$useable_letters]"
+            regex="$regex$regex_temp"
+        else
+            regex="$regex."
+        fi
+    fi
 
     regex="$regex$"
 
     echo "Regex: $regex" > "$terminal"
 
     # filter possible_words with regex and useless_letters
-    for letter in $(echo "$useless_letters" | fold -w1 | sort -
-u); do
+    for letter in $(echo "$useless_letters" | fold -w1 | sort -u); do
         possible_words=$(echo "$possible_words" | grep -v "$letter")
     done
 
-    # get the first word that matches the regex
-    next_possible=$(echo "$possible_words" | grep -E "$regex" | head -n 1)
+    # if next_possible exists in history, then get the next one
+    while echo "$guesses" | grep -q "$next_possible"; do
+        next_possible=$(echo "$possible_words" | grep -E "$regex" | grep -v "$next_possible" | head -n 1)
+    done
+
     echo "Next possible word: $next_possible" > "$terminal"
 
     # next_possible="apple"
@@ -149,16 +187,9 @@ u); do
 }
 
 ## get parameter tag -t SYS_INFO
-while getopts "aht:" opt
+while getopts ":t:h" opt
 do
     case $opt in
-        a) echo "hw1.sh -t TASK_TYPE [-h]"
-            echo ""
-            echo "Available Options:"
-            echo "-t SYS_INFO | WORDLE | QUORDLE : Task type"
-            echo "-h : Show the script usage"
-           exit 1
-        ;;
         h)
         # echo help message to stderr
         echo "hw1.sh -t TASK_TYPE [-h]" >&2
@@ -166,7 +197,7 @@ do
         echo "Available Options:" >&2
         echo "-t SYS_INFO | WORDLE | QUORDLE : Task type" >&2
         echo "-h : Show the script usage" >&2
-            exit 1
+            exit 0
         ;;
 
         t) TAG=$OPTARG
@@ -278,13 +309,12 @@ do
         ;;
 
 
-        ?)
-        echo "hw1.sh -t TASK_TYPE [-h]" >&2
-        echo "" >&2
-        echo "Available Options:" >&2
-        echo "-t SYS_INFO | WORDLE | QUORDLE : Task type" >&2
-        echo "-h : Show the script usage" >&2
-        exit 1
+        ?) echo "hw1.sh -t TASK_TYPE [-h]">&2
+            echo "">&2
+            echo "Available Options:" >&2
+            echo "-t SYS_INFO | WORDLE | QUORDLE : Task type" >&2
+            echo "-h : Show the script usage" >&2
+            exit 1
         ;;
 
 
