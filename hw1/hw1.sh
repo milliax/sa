@@ -130,7 +130,8 @@ get_next_possible(){
             allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_1" | fold -w1 | sort -u | tr -d '\n')")
         fi
         if [ -n "$allowed" ]; then
-            regex="$regex[$allowed]"
+            regex_temp="[$allowed]"
+            regex="$regex$regex_temp"
         else
             regex="$regex."
         fi
@@ -145,7 +146,8 @@ get_next_possible(){
             allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_2" | fold -w1 | sort -u | tr -d '\n')")
         fi
         if [ -n "$allowed" ]; then
-            regex="$regex[$allowed]"
+            regex_temp="[$allowed]"
+            regex="$regex$regex_temp"
         else
             regex="$regex."
         fi
@@ -160,7 +162,8 @@ get_next_possible(){
             allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_3" | fold -w1 | sort -u | tr -d '\n')")
         fi
         if [ -n "$allowed" ]; then
-            regex="$regex[$allowed]"
+            regex_temp="[$allowed]"
+            regex="$regex$regex_temp"
         else
             regex="$regex."
         fi
@@ -175,7 +178,8 @@ get_next_possible(){
             allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_4" | fold -w1 | sort -u | tr -d '\n')")
         fi
         if [ -n "$allowed" ]; then
-            regex="$regex[$allowed]"
+            regex_temp="[$allowed]"
+            regex="$regex$regex_temp"
         else
             regex="$regex."
         fi
@@ -190,7 +194,8 @@ get_next_possible(){
             allowed=$(echo "$allowed" | tr -d "$(echo "$excluded_5" | fold -w1 | sort -u | tr -d '\n')")
         fi
         if [ -n "$allowed" ]; then
-            regex="$regex[$allowed]"
+            regex_temp="[$allowed]"
+            regex="$regex$regex_temp"
         else
             regex="$regex."
         fi
@@ -222,6 +227,76 @@ get_next_possible(){
 
     # next_possible="apple"
     return    
+}
+
+get_next_possible_for_quad(){
+    echo "Getting next possible for quad with history: $1" > "$terminal"
+    
+    # if $1 equals "|||", then return water
+    if [ "$1" = "|||" ]; then
+        echo "No previous guesses, returning water" > "$terminal"
+        next_possible="water"
+        return
+    fi
+
+    # get the last guess
+    IFS='|'
+    set -- $1
+    guess_history_1=$1
+    guess_history_2=$2
+    guess_history_3=$3
+    guess_history_4=$4
+
+    correct_1=0
+    correct_2=0
+    correct_3=0
+    correct_4=0
+
+    if [ -n "$guess_history_1" ]; then
+        if echo "$guess_history_1" | grep -q ":AAAAA;"; then
+            correct_1=1
+        fi
+    fi
+
+    if [ -n "$guess_history_2" ]; then
+        if echo "$guess_history_2" | grep -q ":AAAAA;"; then
+            correct_2=1
+        fi
+    fi
+
+    if [ -n "$guess_history_3" ]; then
+        if echo "$guess_history_3" | grep -q ":AAAAA;"; then
+            correct_3=1
+        fi
+    fi
+
+    if [ -n "$guess_history_4" ]; then
+        if echo "$guess_history_4" | grep -q ":AAAAA;"; then
+            correct_4=1
+        fi
+    fi
+
+    # prioritize the first one if not solved yet
+
+    if [ $correct_1 -eq 0 ]; then
+        get_next_possible "$guess_history_1"
+        return
+    fi
+
+    if [ $correct_2 -eq 0 ]; then
+        get_next_possible "$guess_history_2"
+        return
+    fi
+
+    if [ $correct_3 -eq 0 ]; then
+        get_next_possible "$guess_history_3"
+        return
+    fi
+
+    if [ $correct_4 -eq 0 ]; then
+        get_next_possible "$guess_history_4"
+        return
+    fi
 }
 
 ## get parameter tag -t SYS_INFO
@@ -325,6 +400,82 @@ do
             get_dictionary
 
             ### Request a quordle task from server with json parameters
+            response=$(curl -s -X POST "$ENDPOINT/tasks" -H "Content-Type: application/json" -d '{"stuid": "'"$stuid"'", "type": "QUORDLE"}')
+
+            guess_times=0
+
+            # get task id
+            id="$(echo "$response" | jq -r '.id')"
+            echo "Task ID: $id"
+
+            guess_1_correct=0
+            guess_2_correct=0
+            guess_3_correct=0
+            guess_4_correct=0
+
+            guess_all_correct=0
+
+            guess_history_1="" # it is a string, format: "GUESS1:RESULT1;GUESS2:RESULT2;..."
+            guess_history_2="" # it is a string, format: "GUESS1:RESULT1;GUESS2:RESULT2;..."
+            guess_history_3="" # it is a string, format: "GUESS1:RESULT1;GUESS2:RESULT2;..."
+            guess_history_4="" # it is a string, format: "GUESS1:RESULT1;GUESS2:RESULT2;..."
+
+            while [ $guess_times -lt 20 ] && [ $guess_all_correct -eq 0 ]; do
+
+                echo ""
+                echo "Guess times: $((guess_times + 1))"
+                echo "Guess history 1: $guess_history_1"
+                echo "Guess history 2: $guess_history_2"
+                echo "Guess history 3: $guess_history_3"
+                echo "Guess history 4: $guess_history_4"
+
+                guess_times=$((guess_times + 1))
+
+                get_next_possible_for_quad "$guess_history_1|$guess_history_2|$guess_history_3|$guess_history_4"
+
+                # if any of next_possible is empty, then exit 1
+                if [ -z "$next_possible" ] ; then
+                    echo "No possible word found, exiting..."
+                    exit 1
+                fi
+
+                url="$ENDPOINT/tasks/$id/submit"
+                echo "Submitting guesses '$next_possible' to $url"
+
+                response=$(curl -s -X POST "$url" -H "Content-Type: application/json" -d '{"answer": "'"$next_possible"'"}')
+                echo "Response from server:"
+                echo "$response"
+
+                guess_result_1="$(echo "$response" | jq -r '.problem1')"
+                guess_result_2="$(echo "$response" | jq -r '.problem2')"
+                guess_result_3="$(echo "$response" | jq -r '.problem3')"
+                guess_result_4="$(echo "$response" | jq -r '.problem4')"
+
+                # store the guess and result to guess_history
+                guess_history_1="$guess_history_1$next_possible:$guess_result_1;"
+                guess_history_2="$guess_history_2$next_possible:$guess_result_2;"
+                guess_history_3="$guess_history_3$next_possible:$guess_result_3;"
+                guess_history_4="$guess_history_4$next_possible:$guess_result_4;"
+
+                if [ "$guess_result_1" = "AAAAA" ]; then
+                    guess_1_correct=1
+                    echo "Got the Answer for problem 1!"
+                fi
+                if [ "$guess_result_2" = "AAAAA" ]; then
+                    guess_2_correct=1
+                    echo "Got the Answer for problem 2!"
+                fi
+                if [ "$guess_result_3" = "AAAAA" ]; then
+                    guess_3_correct=1
+                    echo "Got the Answer for problem 3!"
+                fi
+                if [ "$guess_result_4" = "AAAAA" ]; then
+                    guess_4_correct=1
+                    echo "Got the Answer for problem 4!"
+                fi
+
+                guess_all_correct=$((guess_1_correct & guess_2_correct & guess_3_correct & guess_4_correct))
+            done
 
             exit 0
         fi
